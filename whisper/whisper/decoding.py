@@ -583,3 +583,142 @@ class ApplyTimestampRules(LogitFilter):
                 logits[k, : self.tokenizer.timestamp_begin] = -np.inf
 
 
+class DecodingTask:
+    inference: Inference
+    sequence_ranker: SequenceRanker
+    decoder: TokenDecoder
+    logit_filter: List[LogitFilter]
+
+    def __init__(self, model: "Whisper", options: DecodingOptions):
+        self.model = model
+
+        language = options.language or "en"
+        tokenizer = get_tokenizer(
+                        model.is_multilingual,
+                        num_languages=model.num_languages,
+                        language=language,
+                        task=options.task)
+        self.tokenizer: Tokenizer = tokenizer
+        self.options: DecodingOptions = self.__verify_options(options)
+
+        self.n_group: int = options.beam_size or options.best_of or 1
+        self.n_ctx: int = model.dims.n_text_ctx
+        self.sample_len: int = options.sample_len \
+                                or model.dims.n_text_ctx // 2
+        
+        self.sot_sequence: Tuple[int] = tokenizer.sot_sequence
+        if self.options.without_timestamps:
+            self.sot_sequence = tokenizer.sot_sequence_including_notimestamps
+        
+        self.initial_tokens: Tuple[int] = self._get_initial_tokens()
+        self.sample_begin: int = len(self.initial_tokens)
+        self.sot_index: int = self.initial_tokens.index(tokenizer.sot)
+
+        # inference: implements the forward pass through the decoder,
+        # including kv caching
+        self.inference = PyTorchInference(model, len(self.initial_tokens))
+
+        # sequence ranker: implements how to rank a group of sampled sequences
+        self.sequence_ranker = MaximumLikelihoodRanker(options.length_penalty)
+
+        # decoder: implements how to select the next tokens, 
+        # given the autogressive distribution
+        if options.beam_size is not None:
+            self.decoder = BeamSearchDecoder(options.beam_size,
+                                                tokenizer.eot,
+                                                self.inference,
+                                                options.patience)
+        else:
+            self.decoder = GreedyDecoder(options.temperature, tokenizer.eot)
+        
+        # logit filters: applies various rules to suppress or penalize
+        # certain tokens
+        self.logit_filters = []
+        if self.options.suppress_blank:
+            self.logit_filters.append(
+                SuppressBlank(self.tokenizer, self.sample_begin))
+        if self.options.suppress_tokens:
+            self.logit_filters.append(
+                SuppressTokens(self._get_suppress_tokens()))
+        if not options.without_timestamps:  # usually 0.02 seconds
+            precision = CHUNK_LENGTH / model.dims.n_audio_ctx   
+            max_initial_timestamp_index = None
+            if options.max_initial_timestamp:
+                max_initial_timestamp_index = \
+                    round(self.options.max_initial_timestamp / precision)
+            
+            self.logit_filters.append(
+                ApplyTimestampRules(
+                    tokenizer,
+                    self.sample_begin,
+                    max_initial_timestamp_index))
+    
+    def _verify_options(self, options: DecodingOptions) -> DecodingOptions:
+        if options.beam_size is not None and options.best_of is not None:
+            raise ValueError("beam_size and best_of can't be given together")
+        if options.temperature == 0:
+            raise ValueError(
+                "best_of with greedy sampling (T=0) is not compatible")
+        if options.patience is not None and options.beam_size is None:
+            raise ValueError("patience requires beam_size to be given")
+        if options.length_penalty is not None and not (
+            0 <= options.length_penalty <= 1):
+            raise ValueError(
+                "length_penalty (alpha) should be a value between 0 and 1")
+            
+        return options
+
+    def _get_initial_tokens(self) -> Tuple[int]:
+        tokens = list(self.sot_sequence)
+
+        if prefix := self.options.prefix:
+            prefix_tokens = (self.tokenizer.encode(" ") + prefix.strip()
+                            if isinstance(prefix, str)
+                            else prefix)
+            if self.sample_len is not None:
+                max_prefix_len = self.n_ctx // 2 - self.sample_len
+                prefix_tokens = prefix_tokens[-max_prefix_len:]
+            tokens = tokens + prefix_tokens
+        
+        if prompt := self.options.prompt:
+            prompt_tokens = (self.tokenizer.encode(" " + prompt.strip())
+                            if isinstance(prompt, str)
+                            else prompt)
+            tokens = ([self.tokenizer.sot_prev]
+                        + prompt_tokens[-(self.n_ctx // 2 - 1) :]
+                        + tokens)
+        
+        return tuple(tokens)
+    
+    def _get_suppress_tokens(self) -> Tuple[int]:
+        suppress_tokens = self.options.suppress_tokens
+
+        if isinstance(suppress_tokens, str):
+            suppress_tokens = [int(t)
+                                for t in suppress_tokens.split(",")]
+
+        if -1 in suppress_tokens:
+            suppress_tokens = [t for t in suppress_tokens if t >= 0]
+            suppress_tokens.extend(self.tokenizer.non_speech_tokens)
+        elif suppress_tokens is None or len(suppress_tokens) == 0:
+            suppress_tokens = []    # interpret empty string as an empty list
+        else:
+            assert isinstance(suppress_tokens, list), \
+                "suppress_tokens must be a list"
+        
+        suppress_tokens.extend(
+            [
+                self.tokenizer.transcribe,
+                self.tokenizer.translate,
+                self.tokenizer.sot,
+                self.tokenizer.sot_prev,
+                self.tokenizer.sot_lm,
+            ]
+        )
+        if self.tokenizer.no_speech is not None:
+            # no-speech probability is collected seperately
+            suppress_tokens.append(self.tokenizer.no_speech)
+        
+        return tuple(sorted(set(suppress_tokens)))
+    
+    
