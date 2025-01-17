@@ -102,3 +102,11 @@ def _download(url: str,
     
     return model_bytes if in_memory else download_target
 
+
+def available_models() -> List[str]:
+    """
+    Returns the names of available models
+    """
+    return list(_MODELS.keys())
+
+
