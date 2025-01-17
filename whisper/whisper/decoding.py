@@ -474,3 +474,22 @@ class BeamSearchDecoder(TokenDecoder):
         return tokens, sum_logprobs
 
 
+class LogitFilter:
+    def apply(
+        self,
+        logits: Tensor,
+        tokens: Tensor) -> None:
+        """
+        Apply any filtering or masking to logits in-place
+
+        Parameters:
+            logits(Tensor, shape = (n_batch, vocab_size)):
+                per-token logits of the probability distribution at the
+                    current step
+                tokens(Tensor, shape = (n_batch, current_sequence_length)):
+                    all tokens in the context so far, including the prefix
+                        and sot_sequence tol
+        """
+        raise NotImplementedError
+
+
