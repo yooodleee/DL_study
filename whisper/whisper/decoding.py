@@ -89,3 +89,53 @@ def detect_language(model: "Whisper",
     return language_tokens, language_probs
 
 
+@dataclass(frozen=True)
+class DecodingOptions:
+    # Whether to perform X->X "transcribe" or X->English "translate"
+    task: str = "transcribe"
+
+    # language that the audio is in; uses detected language if None
+    language: Optional[str] = None
+
+    # sampling-related options
+    temperature: float = 0.0
+    # maximum number of tokens to sample
+    sample_len: Optional[int] = None
+    # number of independent sample trajectories, it t > 0
+    best_of: Optional[int] = None
+    # number of beams in beam search, if t == 0
+    beam_size: Optional[int] = None
+    # patience in beam search (arxiv:2204.05424)
+    patience: Optional[float] = None
+
+    # "alpha" in Google NMT, or None for length norm, when ranking generations
+    # to select which to return among the beams or best-of-N samples
+    length_penalty: Optional[float] = None
+
+    # text or tokens to feed as the prompt or the prefix; for more info:
+    # https://github.com/openai/whisper/discussions/117#discussioncoment-3727051
+    
+    # for the previous context
+    prompt: Optional[Union[str, List[int]]] = None
+    # to prefix the current context
+    prefix: Optional[Union[str, List[int]]] = None
+
+    # list of tokens ids (or comma-separated token ids) to suppress
+    # "-1" will suppress a set of symbols as defined in 
+    # `tokenizer.non_speech_tokens()`
+    suppress_tokens: Optional[Union[str, Iterable[int]]] = "-1"
+    # this will suppress blank outputs
+    suppress_blank: bool = True
+
+    # timestamp sampling options
+
+    # use <|notimestamps|> to sample text tokens only
+    without_timestamps: bool = False
+    max_initial_timestamp: Optional[float] = 1.0
+
+    # implementation details
+
+    # use fp16 for most of the calculation
+    fp16: bool = True
+
+
