@@ -493,3 +493,14 @@ class LogitFilter:
         raise NotImplementedError
 
 
+class SuppressBlank(LogitFilter):
+    def __init__(self, tokenizer: Tokenizer, sample_begin: int):
+        self.tokenizer = tokenizer
+        self.sample_begin = sample_begin
+    
+    def apply(self, logits: Tensor, tokens: Tensor):
+        if tokens.shape[1] == self.sample_begin:
+            logits[:, self.tokenizer.encode(" ")\
+                    + [self.tokenizer.eot]] = -np.inf
+
+
