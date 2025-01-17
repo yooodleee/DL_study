@@ -152,3 +152,25 @@ class DecodingResult:
     compression_ratio: float = np.nan
 
 
+class Inference:
+    def logits(self,
+               tokens: Tensor,
+               audio_features: Tensor) -> Tensor:
+        """
+        Perform a forward pass on the decoder and return per-token logits
+        """
+        raise NotImplementedError
+    
+    def rearrange_kv_cache(self, source_indices) -> None:
+        """
+        Update the key-value cache according to the updated beams
+        """
+        raise NotImplementedError
+    
+    def cleanup_caching(self) -> None:
+        """
+        Clean up any resources or hooks after decoding is finished
+        """
+        pass
+
+
