@@ -222,3 +222,16 @@ class PyTorchInference(Inference):
                     self.kv_cache[module][source_indices].detach()
 
 
+class SequenceRanker:
+    def rank(
+            self,
+            tokens: List[List[Tensor]],
+            sum_logprobs: List[List[float]]) -> List[int]:
+        """
+        Given a list of groups of samples and their cumulative 
+            log probabilities, return the indices of the samples in each
+            group to select as the final result.
+        """
+        raise NotImplementedError
+
+
