@@ -139,3 +139,16 @@ class DecodingOptions:
     fp16: bool = True
 
 
+@dataclass(frozen=True)
+class DecodingResult:
+    audio_features: Tensor
+    language: str
+    language_probs: Optional[Dict[str, float]] = None
+    tokens: List[int] = field(default_factory=list)
+    text: str = ""
+    avg_logprobs: float = np.nan
+    no_speech_prob: float = np.nan
+    temperature: float = np.nan
+    compression_ratio: float = np.nan
+
+
