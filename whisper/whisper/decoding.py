@@ -504,3 +504,11 @@ class SuppressBlank(LogitFilter):
                     + [self.tokenizer.eot]] = -np.inf
 
 
+class SuppressTokens(LogitFilter):
+    def __init__(self, suppress_tokens: Sequence[int]):
+        self.suppress_tokens = list(suppress_tokens)
+    
+    def apply(self, logits: Tensor, tokens: Tensor):
+        logits[:, self.suppress_tokens] = -np.inf
+
+
