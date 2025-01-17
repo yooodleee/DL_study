@@ -721,4 +721,50 @@ class DecodingTask:
         
         return tuple(sorted(set(suppress_tokens)))
     
+    def _get_audio_features(self, mel: Tensor):
+        if self.options.fp16:
+            mel = mel.half()
+
+        if mel.shape[-2:] == (self.model.dims.n_audio_ctx,
+                                self.model.dims.n_audio_state):
+            # encoded audio features are given; skip audio encoding
+            audio_features = mel
+        else:
+            audio_features = self.model.encoder(mel)
+        
+        if audio_features.dtype != (torch.float16
+                                    if self.options.fp16
+                                    else torch.float32):
+            return TypeError(
+                f"audio_features has in incorrect dtype: 
+                {audio_features.dtype}")
+        
+        return audio_features
     
+    def _detect_language(self, audio_features: Tensor, tokens: Tensor):
+        languages = [self.options.language] * audio_features.shape[0]
+        lang_probs = None
+
+        if self.options.language is None or self.options.task == "lang_id":
+            lang_tokens, lang_probs = self.model.detect_language(
+                                        audio_features,
+                                        self.tokenizer)
+            languages = [max(probs, key=probs.get)
+                        for probs in lang_probs]
+            if self.options.language is None:
+                # write language tokens
+                tokens[:, self.sot_index + 1] = lang_tokens
+            
+        return languages, lang_probs
+    
+    def _main_loop(self, audio_features: Tensor, tokens: Tensor):
+        n_batch = tokens.shape[0]
+        sum_logprobs: Tensor = torch.zeros(n_batch,
+                                            device=audio_features.device)
+        no_speech_probs = [np.nan] * n_batch
+
+        try:
+            for i in range(self.sample_len):
+                logits = self.inference.logits(tokens, audio_features)
+            
+                
