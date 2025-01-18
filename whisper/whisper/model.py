@@ -36,8 +36,16 @@ class ModelDimensions:
     n_text_layer: int
 
 
-class LayerNrom(nn.LayerNorm):
+class LayerNorm(nn.LayerNorm):
     def forward(self, x: Tensor) -> Tensor:
         return super().forward(x.float()).type(x.dtype)
+
+
+class Linear(nn.Linear):
+    def forward(self, x: Tensor) -> Tensor:
+        return F.linear(
+            x,
+            self.weight.to(x.dtype),
+            None if self.bias is None else self.bias.to(x.dtype))
 
 
