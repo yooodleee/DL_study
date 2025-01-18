@@ -129,3 +129,57 @@ TO_LANGUAGE_CODE = {
 }
 
 
+@dataclass
+class Tokenizer:
+    """
+    A train wrapper around `tiktoken` providing quick access
+        to special tokens.
+    """
+    encoding: tiktoken.Encoding
+    num_languages: int
+    language: Optional[str] = None
+    task: Optional[str] = None
+    sot_sequence: Tuple[int] = ()
+    special_tokens: Dict[str, int] = field(default_factory=dict)
+
+    def __post_init__(self):
+        for special in self.encoding.special_tokens_set:
+            special_token = self.encoding.encode_single_token(special)
+            self.special_tokens[special] = special_token
+        
+        sot: int = self.special_tokens["<|startoftranscript|>"]
+        translate: int = self.special_tokens["<|translate|>"]
+        transcribe: int = self.special_tokens["<|transcribe|>"]
+
+        langs = tuple(LANGUAGES.keys())[: self.num_languages]
+        sot_sequence = [sot]
+        if self.language is not None:
+            sot_sequence.append(sot + 1 + langs.index(self.language))
+        if self.task is not None:
+            task_token: int = transcribe \
+                            if self.task == "transcribe" else translate
+            sot_sequence.append(task_token)
+        
+        self.sot_sequence = tuple(sot_sequence)
+    
+    def encode(self, text, **kwargs):
+        return self.encoding.encode(text, **kwargs)
+    
+    def decode(self, token_ids: List[int], **kwargs) -> str:
+        token_ids = [t for t in token_ids
+                     if t < self.timestamp_begin]
+        return self.encoding.decode(token_ids, **kwargs)
+    
+    def decode_with_timestamps(
+            self,
+            token_ids: List[int],
+            **kwargs) -> str:
+        """
+        Timestamp tokens are above other special tokens ` id range and are
+            ignored by `decode()`.
+        This method decodes given tokens with timestamps tokens annotated,
+            e.g. "<|1.08|>". 
+        """
+        return self.encoding.decode(token_ids, **kwargs)
+    
+    
