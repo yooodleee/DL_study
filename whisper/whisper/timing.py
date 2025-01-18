@@ -259,3 +259,43 @@ def find_alignment(
     ]
 
 
+def merge_punctuations(
+        alignment: List[WordTiming],
+        prepended: str,
+        appended: str):
+    
+    # merge prepended punctuations
+    i = len(alignment) - 2
+    j = len(alignment) - 1
+    while i >= 0:
+        previous = alignment[i]
+        following = alignment[j]
+        if previous.word.startswith(" ") \
+        and previous.word.strip() in prepended:
+            # prepend it to the following word
+            following.word = previous.word + following.word
+            following.tokens = previous.tokens + following.tokens
+            previous.word = ""
+            previous.tokens = []
+        else:
+            j = i
+        i -= 1
+
+    # merge appended punctuations
+    i = 0
+    j = 1
+    while j < len(alignment):
+        previous = alignment[i]
+        following = alignment[j]
+        if not previous.word.endswith(" ") \
+        and following.word in following.word in appended:
+            # append it to the previous word
+            previous.word = previous.word + following.word
+            previous.tokens = previous.tokens + following.tokens
+            following.word = ""
+            following.tokens = []
+        else:
+            i = j
+        j += 1
+
+
