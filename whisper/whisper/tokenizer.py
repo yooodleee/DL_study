@@ -334,5 +334,22 @@ class Tokenizer:
 
         return words, word_tokens
     
+    def split_tokens_on_spaces(self, tokens: List[int]):
+        subwords, subword_tokens_list = self.split_tokens_on_unicode(tokens)
+        words = []
+        word_tokens = []
+
+        for subword, subword_tokens in zip(subword, subword_tokens_list):
+            special = subword_tokens[0] >= self.eot
+            with_space = subword.startswith(" ")
+            punctuation = subword.strip() in string.punctuation
+            if special or with_space or punctuation or len(words) == 0:
+                words.append(subword)
+                word_tokens.append(subword_tokens)
+            else:
+                words[-1] = words[-1] + subword
+                word_tokens[-1].extend(subword_tokens)
+        
+        return words, word_tokens
     
     
