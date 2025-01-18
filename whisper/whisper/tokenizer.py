@@ -352,4 +352,39 @@ class Tokenizer:
         
         return words, word_tokens
     
+
+@lru_cache(maxsize=None)
+def get_encoding(name: str = "gpt2", num_languages: int = 99):
+    vocab_path = os.path.join(os.path.dirname(__file__),
+                              "assets",
+                              f"{name}.tiktoken")
+    ranks = {
+        base64.b64decode(token): int(rank)
+        for token, rank in (line.split() for line in open(vocab_path) if line)
+    }
+    n_vocab = len(ranks)
+    special_tokens = {}
+
+    specials = [
+        "<|endoftext|>",
+        "<|startoftranscript|>",
+        *[f"<|{lang}|>" for lang in list(LANGUAGES.keys())[:num_languages]],
+        "<|translate|>",
+        "<|transcribe|>",
+        "<|startoflm|>",
+        "<|startofprev|>",
+        "<|nospeech|>",
+        "<|notimestamps|>",
+        *[f"<|{i * 0.02:.2f}|>" for i in range(1501)],
+    ]
+
+    for token in specials:
+        special_tokens[token] = n_vocab
+        n_vocab += 1
     
+    return tiktoken.Encoding(
+        name=os.path.basename(vocab_path),
+        explicit_n_vocab=n_vocab,
+        pat_str=r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
+        mergeable_ranks=ranks,
+        special_tokens=special_tokens)
