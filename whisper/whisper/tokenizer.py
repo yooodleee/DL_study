@@ -388,3 +388,38 @@ def get_encoding(name: str = "gpt2", num_languages: int = 99):
         pat_str=r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",
         mergeable_ranks=ranks,
         special_tokens=special_tokens)
+
+
+@lru_cache(maxsize=None)
+def get_tokenizer(
+        multilingual: bool,
+        *,
+        num_languages: int = 99,
+        language: Optional[str] = None,
+        task: Optional[str] = None, # Literal["transcribe", "translate", None]
+) -> Tokenizer:
+    if language is not None:
+        language = language.lower()
+        if language not in LANGUAGES:
+            if language in TO_LANGUAGE_CODE:
+                language = TO_LANGUAGE_CODE[language]
+            else:
+                raise ValueError(f"Unsupported language: {language}")
+    
+    if multilingual:
+        encoding_name = "multilingual"
+        language = language or "en"
+        task = task or "transcribe"
+    else:
+        encoding_name = "gpt2"
+        language = None
+        task = None
+    
+    encoding = get_encoding(name=encoding_name,
+                            num_languages=num_languages)
+    
+    return Tokenizer(
+        encoding=encoding,
+        num_languages=num_languages,
+        language=language,
+        task=task)
