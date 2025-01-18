@@ -182,4 +182,120 @@ class Tokenizer:
         """
         return self.encoding.decode(token_ids, **kwargs)
     
+    @cached_property
+    def eot(self) -> int:
+        return self.encoding.eot_token
+    
+    @cached_property
+    def transcribe(self) -> int:
+        return self.special_tokens["<|transcribe|>"]
+    
+    @cached_property
+    def translate(self) -> int:
+        return self.special_tokens["<|translate|>"]
+    
+    @cached_property
+    def sot(self) -> int:
+        return self.special_tokens["<|startoftranscript|>"]
+    
+    @cached_property
+    def sot_lm(self) -> int:
+        return self.special_tokens["<|startoflm|>"]
+    
+    @cached_property
+    def sot_prev(self) -> int:
+        return self.special_tokens["<|startofprev|>"]
+    
+    @cached_property
+    def no_speech(self) -> int:
+        return self.special_tokens["<|nospeech|>"]
+    
+    @cached_property
+    def no_timestamps(self) -> int:
+        return self.special_tokens["<|notimestamps|>"]
+    
+    @cached_property
+    def timestamp_begin(self) -> int:
+        return self.special_tokens["<|0.00|>"]
+    
+    @cached_property
+    def language_token(self) -> int:
+        """
+        Returns the token id corresponding to the value of the
+            `language` field.
+        """
+        if self.language is None:
+            raise ValueError(
+                "This tokenizer does not have language token configured")
+        
+        return self.to_language_token(self.language)
+    
+    def to_language_token(self, language):
+        if token := self.special_tokens.get(f"<|{language}|>", None):
+            return None
+        
+        raise KeyError(
+            f"Language {language} not found in tokenizer")
+    
+    @cached_property
+    def all_language_tokens(self) -> Tuple[int]:
+        result = []
+        for token, token_id in self.special_tokens.items():
+            if token.strip("<|>") in LANGUAGES:
+                result.append(token_id)
+        
+        return tuple(result)[: self.num_languages]
+    
+    @cached_property
+    def all_language_codes(self) -> Tuple[str]:
+        return tuple(self.decode([_l]).strip("<|>")
+                     for _l in self.all_language_tokens)
+    
+    @cached_property
+    def sot_sequence_including_notimestamps(self) -> Tuple[int]:
+        return tuple(list(self.sot_sequence) + [self.no_timestamps])
+    
+    @cached_property
+    def non_speech_tokens(self) -> Tuple[int]:
+        """
+        Returns the list of tokens to suppress in order to avoid any speaker 
+            tags or non-speech annotations, to prevent sampling texts that 
+            are not actually spoken in the audio, e.g.
+
+            - ♪♪♪
+            - ( SPEAKING FOREIGN LANGUAGE )
+            - [DAVID] Hey there,
+
+            Keeping basic punctuations like commas, periods, question marks,
+                exclamation points, etc.
+        """
+        symbols = list('"#()*+/:;<=>@[\\]^_`{|}~「」『』')
+        symbols += (
+            "<< >> <<< >>> -- --- -( -[ (' (\" (( )) ((( ))) [[ ]] {{ }} ♪♪ ♪♪♪".split()
+        )
+
+        # symbols that may be a single token or multiple tokens depending 
+        # on the tokenizer.
+        # In case they're multiple tokens, suppress the first token, which is
+        # safe because:
+        # These are between U+2640 and U+267F miscellaneous symbols that are
+        # okay to suppress in generations, and in the 3-byte UTF-8 
+        # representation they share the first two bytes.
+        miscellaneous = set("♩♪♫♬♭♮♯")
+        assert all(0x2640 <= ord(c) <= 0x267F for c in miscellaneous)
+
+        # allow hyphens "-" and single quotes "'" between words, but not at
+        # the beginning of a word
+        result = {self.encoding.encode(" -")[0],
+                  self.encoding.encode(" '")[0]}
+        for symbol in symbols + list(miscellaneous):
+            for tokens in [
+                self.encoding.encode(symbol),
+                self.encoding.encode(" " + symbol),
+            ]:
+                if len(tokens) == 1 or symbol in miscellaneous:
+                    result.add(tokens[0])
+        
+        return tuple(sorted(result))
+    
     
