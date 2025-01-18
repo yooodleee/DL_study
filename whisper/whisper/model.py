@@ -155,3 +155,45 @@ class MultiHeadAttention(nn.Modle):
         return out, qk
 
 
+class ResidualAttentionBlock(nn.Module):
+    def __init__(
+            self,
+            n_state: int,
+            n_head: int,
+            cross_attention: bool = False):
+        super().__init__()
+
+        self.attn = MultiHeadAttention(n_state, n_head)
+        self.attn_ln = LayerNorm(n_state)
+
+        self.cross_attn = (
+            MultiHeadAttention(n_state, n_head) if cross_attention else None)
+        self.cross_attn_ln = LayerNorm(n_state) if cross_attention else None
+
+        n_mlp = n_state * 4
+        self.mlp = nn.Sequential(
+                    Linear(n_state, n_mlp),
+                    nn.GELU(),
+                    Linear(n_mlp, n_state))
+        self.mlp_ln = LayerNorm(n_state)
+    
+    def forward(
+            self,
+            x: Tensor,
+            xa: Optional[Tensor] = None,
+            mask: Optional[Tensor] = None,
+            kv_cache: Optional[dict] = None):
+        
+        x = x + self.attn(self.attn_ln(x),
+                          mask=mask,
+                          kv_cache=kv_cache)[0]
+        if self.cross_attn:
+            x = x + self.cross_attn(self.cross_attn_ln(x),
+                                    xa,
+                                    kv_cache=kv_cache)[0]
+        
+        x = x + self.mlp(self.mlp_ln(x))
+
+        return x
+    
+
