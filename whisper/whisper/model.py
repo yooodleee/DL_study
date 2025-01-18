@@ -88,3 +88,70 @@ def disable_sdpa():
         MultiHeadAttention.use_sdpa = prev_state
 
 
+class MultiHeadAttention(nn.Modle):
+    use_sdpa = True
+
+    def __init__(self, n_state: int, n_head: int):
+        super().__init__()
+        self.n_head = n_head
+        self.query = Linear(n_state, n_state)
+        self.key = Linear(n_state, n_state, bias=False)
+        self.value = Linear(n_state, n_state)
+        self.out = Linear(n_state, n_state)
+
+    def forward(
+            self,
+            x: Tensor,
+            xa: Optional[Tensor] = None,
+            mask: Optional[Tensor] = None,
+            kv_cache: Optional[Tensor] = None):
+        
+        q = self.query(x)
+
+        if kv_cache is None or xa is None or self.key not in kv_cache:
+            # hooks, if installed (i.e. kv_cache is not None),
+            # will prepend the cached kv tensors;
+            # otherwise, perform key/value projections for 
+            # self- or cross-attention as usual.
+            k = self.key(x if xa is None else xa)
+            v = self.value(x if xa is None else xa)
+        else:
+            # for cross-attention, calculate keys and values once and reuse
+            # in subsequent calls.
+            k = kv_cache[self.key]
+            v = kv_cache[self.value]
+        
+        wv, qk = self.qkv_attention(q, k, v, mask)
+        return self.out(wv), qk
+    
+    def qkv_attention(
+            self,
+            q: Tensor,
+            k: Tensor,
+            v: Tensor,
+            mask: Optional[Tensor] = None
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        n_batch, n_ctx, n_state = q.shape
+        scale = (n_state // self.n_head) ** -0.25
+        q = q.view(*q.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
+        k = k.view(*k.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
+        v = v.view(*v.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
+
+        if SDPA_AVALIABLE and MultiHeadAttention.use_sdpa:
+            a = scaled_dot_product_attention(
+                q, k, v, is_causal=mask is not None and n_ctx > 1)
+            out = a.permute(0, 2, 1, 3).flatten(start_dim=2)
+            qk = None
+        else:
+            qk = (q * scale) @ (k * scale).transpose(-1, -1)
+            if mask is not None:
+                qk = qk + mask[:n_ctx, :n_ctx]
+            qk = qk.float()
+
+            w = F.softmax(qk, dim=-1).to(q.dtype)
+            out = (w @ v).permute(0, 2, 1, 3).flatten(start_dim=2)
+            qk = qk.detach()
+        
+        return out, qk
+
+
