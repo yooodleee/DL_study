@@ -157,3 +157,12 @@ def dtw(x: torch.Tensor) -> np.ndarray:
     return dtw_cpu(x.double().cpu().numpy())
 
 
+@dataclass
+class WordTiming:
+    word: str
+    tokens: List[int]
+    start: float
+    end: float
+    probability: float
+
+
