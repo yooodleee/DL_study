@@ -24,9 +24,10 @@ if TYPE_CHECKING:
 
 
 @torch.no_grad()
-def detect_language(model: "Whisper",
-                    mel: Tensor,
-                    tokenizer: Tokenizer = None) -> Tuple[Tensor, List[dict]]:
+def detect_language(
+        model: "Whisper",
+        mel: Tensor,
+        tokenizer: Tokenizer = None) -> Tuple[Tensor, List[dict]]:
     """
     Detect the spoken language in the audio, and return them as list of 
         strings, along with the ids of the most probable language tokens and 
@@ -46,25 +47,23 @@ def detect_language(model: "Whisper",
         tokenizer = get_tokenizer(model.is_multilingual,
                                   num_languages=model.num_languages)
     
-    if (tokenizer.language is None
-        or tokenizer.language_token not in tokenizer.sot_sequece):
-        raise ValueError(
-            "This model doesn't have language tokens so it can't perform\
-                lang id")
+    if (tokenizer.language \
+        is None or tokenizer.language_token not in tokenizer.sot_sequece):
+        raise ValueError("This model doesn't have language tokens so it can't \
+            perform lang id")
     
     single = mel.ndim == 2
     if single:
         mel = mel.unsqueeze(0)
 
     # skip encoder forward pass if already-encoded audio featrues were given
-    if mel.shape[-2:] != (model.dims.n_audio_ctx,
-                          model.dims.n_audio_state):
+    if mel.shape[-2:] != (model.dims.n_audio_ctx, model.dims.n_audio_state):
         mel = model.encoder(mel)
     
     # forward pass using a single token, startoftranscript
     n_audio = mel.shape[0]
-    x = torch.tensor([[tokenizer.sot]]
-                     * n_audio).to(mel.device)  # [n_audio, 1]
+    # [n_audio, 1]
+    x = torch.tensor([[tokenizer.sot]]* n_audio).to(mel.device)  
     logits = model.logits(x, mel)[:, 0]
 
     # collect detected languates; supress all non-language tokens
@@ -153,9 +152,10 @@ class DecodingResult:
 
 
 class Inference:
-    def logits(self,
-               tokens: Tensor,
-               audio_features: Tensor) -> Tensor:
+    def logits(
+            self,
+            tokens: Tensor,
+            audio_features: Tensor) -> Tensor:
         """
         Perform a forward pass on the decoder and return per-token logits
         """
@@ -192,9 +192,9 @@ class PyTorchInference(Inference):
         self.kv_modules = key_modules + value_modules
     
     def logits(
-        self,
-        tokens: Tensor,
-        audio_features: Tensor) -> Tensor:
+            self,
+            tokens: Tensor,
+            audio_features: Tensor) -> Tensor:
 
         if not self.kv_cache:
             self.kv_cache, self.hooks = self.model.install_kv_cache_hooks()
@@ -434,8 +434,8 @@ class BeamSearchDecoder(TokenDecoder):
 
         # add newly finished sequences to self.finished_sequences
         assert len(self.finished_sequences) == len(finished_sequences)
-        for previously_finished, newly_finished in zip(
-            self.finished_sequences, finished_sequences):
+        for previously_finished, newly_finished \
+            in zip(self.finished_sequences, finished_sequences):
             for seq in sorted(newly_finished,
                               key=newly_finished.get,
                               reverse=True):
@@ -464,21 +464,21 @@ class BeamSearchDecoder(TokenDecoder):
                     if len(sequences) >= self.beam_size:
                         break
         
-        tokens: List[List[Tensor]] = [
-            [torch.tensor(seq) for seq in sequences.keys()]
-            for sequences in self.finished_sequences
-        ]
-        sum_logprobs: List[List[float]] = [
-            list(sequences.values()) for sequences in self.finished_sequences
-        ]
+        tokens: List[List[Tensor]] = [[torch.tensor(seq) \
+                                        for seq in sequences.keys()] \
+                                            for sequences \
+                                                in self.finished_sequences]
+        sum_logprobs: List[List[float]] = [list(sequences.values()) \
+                                            for sequences \
+                                                in self.finished_sequences]
         return tokens, sum_logprobs
 
 
 class LogitFilter:
     def apply(
-        self,
-        logits: Tensor,
-        tokens: Tensor) -> None:
+            self,
+            logits: Tensor,
+            tokens: Tensor) -> None:
         """
         Apply any filtering or masking to logits in-place
 
@@ -514,10 +514,10 @@ class SuppressTokens(LogitFilter):
 
 class ApplyTimestampRules(LogitFilter):
     def __init__(
-        self,
-        tokenizer: Tokenizer,
-        sample_begin: int,
-        max_initial_timestamp_index: Optional[int]):
+            self,
+            tokenizer: Tokenizer,
+            sample_begin: int,
+            max_initial_timestamp_index: Optional[int]):
 
         self.tokenizer = tokenizer
         self.sample_begin = sample_begin
@@ -533,10 +533,10 @@ class ApplyTimestampRules(LogitFilter):
         for k in range(tokens.shape[0]):
             sampled_tokens = tokens[k, self.sample_begin :]
             seq = [t for t in sampled_tokens.tolist()]
-            last_was_timestamp = (
-                len(seq) >= 1 and seq[-1] >= self.tokenizer.timestamp_begin)
-            penultimate_was_timestamp = (
-                len(seq) < 2 or seq[-2] >= self.tokenizer.timestamp_begin)
+            last_was_timestamp = (len(seq) >= 1 and seq[-1] \
+                                    >= self.tokenizer.timestamp_begin)
+            penultimate_was_timestamp = (len(seq) < 2 or seq[-2] \
+                                        >= self.tokenizer.timestamp_begin)
             
             if last_was_timestamp:
                 if penultimate_was_timestamp:   # has to be non-timestamp
@@ -883,7 +883,8 @@ class DecodingTask:
             options: DecodingOptions = DecodingOptions(),
             **kwargs) -> Union[DecodingResult, List[DecodingResult]]:
         """
-        Performs decoding of 30-second audio segment(s), provided as Mel spectrogram(s).
+        Performs decoding of 30-second audio segment(s), provided as 
+            Mel spectrogram(s).
 
         Parameters:
             model(Whisper)
