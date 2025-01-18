@@ -145,3 +145,15 @@ def dtw_cuda(x, BLOCK_SIZE=1024):
     return backtrace(trace.cpu().numpy())
 
 
+def dtw(x: torch.Tensor) -> np.ndarray:
+    if x.is_cuda:
+        try:
+            return dtw_cuda(x)
+        except (RuntimeError, subprocess.CalledProcessError):
+            warnings.warn(
+                "Failed to launch Triton kernels, likely due to missing CUDA "
+                "toolkit; falling back to a slower DTW implementation...")
+    
+    return dtw_cpu(x.double().cpu().numpy())
+
+
