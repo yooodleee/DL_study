@@ -298,4 +298,14 @@ class Tokenizer:
         
         return tuple(sorted(result))
     
+    def split_to_word_tokens(self, tokens: List[int]):
+        if self.language in {"zn", "ja", "th", "lo", "my", "yue"}:
+            # These languages don't typically use spaces, so it is difficult
+            # to split words without morpheme analysis. Here, instead split 
+            # words at any position where the tokens are decoded as valid 
+            # unicode points
+            return self.split_tokens_on_unicode(tokens)
+        
+        return self.split_tokens_on_spaces(tokens)
+    
     
