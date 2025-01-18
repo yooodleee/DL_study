@@ -62,3 +62,19 @@ class Conv1d(nn.Conv1d):
             None if bias is None else bias.to(x.dtype))
 
 
+def sinusoids(length, channels, max_timescale=10000):
+    """
+    Returns sinusoids for positional embedding
+    """
+    assert channels % 2 == 0
+    log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
+    inv_timescales = torch.exp(-log_timescale_increment 
+                               * torch.arange(channels // 2))
+    scaled_time = torch.arange(length)[:, np.newaxis] \
+                    * inv_timescales[np.newaxis, :]
+    
+    return torch.cat([torch.sin(scaled_time),
+                      torch.cos(scaled_time)], 
+                      dim=1)
+
+
