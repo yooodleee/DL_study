@@ -60,3 +60,28 @@ def median_filter(x: torch.Tensor, filter_width: int):
     return result
 
 
+@numba.jit(nonpython=True)
+def backtrace(trace: np.ndarray):
+    i = trace.shape[0] - 1
+    j = trace.shape[1] - 1
+    trace[0, :] = 2
+    trace[:, 0] = 1
+
+    result = []
+    while i > 0 or j > 0:
+        result.append((i - 1, j - 1))
+
+        if trace[i, j] == 0:
+            i -= 1
+            j -= 1
+        elif trace[i, j] == 1:
+            i -= 1
+        elif trace[i, j] == 2:
+            j -= 1
+        else:
+            raise ValueError("Unexpected trace[i, j]")
+    
+    result = np.array(result)
+    return result[::-1, :].T
+
+
