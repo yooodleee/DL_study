@@ -34,3 +34,10 @@ class ModelDimensions:
     n_text_state: int
     n_text_head: int
     n_text_layer: int
+
+
+class LayerNrom(nn.LayerNorm):
+    def forward(self, x: Tensor) -> Tensor:
+        return super().forward(x.float()).type(x.dtype)
+
+
