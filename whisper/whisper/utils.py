@@ -34,3 +34,11 @@ def str2bool(string):
             got{string}")
 
 
+def optional_int(string):
+    return None if string == "None" else int(string)
+
+
+def optional_float(string):
+    return None if string == "None" else float(string)
+
+
