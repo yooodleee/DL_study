@@ -332,7 +332,7 @@ def transcribe(
                 # no voice activity check
                 should_skip = result.no_speech_prob > no_speech_threshold
                 if (logprob_threshold is not None
-                    and result.avg_logprobs
+                    and result.avg_logprob
                     > logprob_threshold):
                     # don't skip if the logprob is high enough,
                     # despite the no_speech_prob
@@ -764,4 +764,73 @@ def cli():
                             when a possible hallucination is detected")
     # fmt: on
 
+    args = parser.parse_args().__dict__
+    model_name: str = args.pop("model")
+    model_dir: str = args.pop("model_dir")
+    output_dir: str = args.pop("output_dir")
+    output_format: str = args.pop("output_format")
+    device: str = args.pop("device")
+    os.makedirs(output_dir, exist_ok=True)
+
+    if model_name.endswith(".en") \
+        and args["language"] not in {"en": "English"}:
+        if args["language"] is not None:
+            warnings.warn(
+                f"{model_name} is an English-only model but receipted
+                '{args['language']}'; using English instead.")
+        args["language"] = "en"
     
+    temperature = args.pop("temperature")
+    if (increment := args.pop("temperature_increment_on_fallback")) \
+    is not None:
+        temperature = tuple(np.arange(temperature,
+                                      1.0 + 1e-6,
+                                      increment))
+    else:
+        temperature = [temperature]
+    
+    if (threads := args.pop("threads")) > 0:
+        torch.set_num_threads(threads)
+    
+    from . import load_model
+
+    model = load_model(model_name,
+                       device=device,
+                       download_root=model_dir)
+    
+    writer = get_writer(output_format, output_dir)
+
+    word_options = ["highlight_words",
+                    "max_line_count",
+                    "max_line_width",
+                    "max_words_per_line"]
+    
+    if not args["word_timestamps"]:
+        for option in word_options:
+            if args[option]:
+                parser.error(
+                    f"--{option} requires --word_timestamps True")
+    if args["max_line_count"] and not args["max_line_width"]:
+        warnings.warn(
+            "--max_line_count has no effect without --max_line_width")
+    if args["max_words_per_line"] and args["max_line_width"]:
+        warnings.warn(
+            "--max_words_per_line has no effect with --max_line_width")
+    writer_args = {arg: args.pop(arg) for arg in word_options}
+
+    for audio_path in args.pop("audio"):
+        try:
+            result = transcribe(model,
+                                audio_path,
+                                temperature=temperature,
+                                **args)
+            writer(result, audio_path, **writer_args)
+        except Exception as e:
+            traceback.print_exc()
+            print(
+                f"Skipping {audio_path} due to 
+                {type(e).__name__}: {str(e)}")
+
+
+if __name__ == "__main__":
+    cli()
