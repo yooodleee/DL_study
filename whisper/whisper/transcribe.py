@@ -478,4 +478,81 @@ def transcribe(
                                                          * FRAMES_PER_SECOND)
                             continue
                     
-                    # 
+                    # skip silence before any possible hallucination that is 
+                    # surrounded by silence or more hallucinations
+                    hal_last_end = last_speech_timestamp
+                    for si in range(len(current_segments)):
+                        segment = current_segments[si]
+                        if not segment["words"]:
+                            continue
+                        if is_segment_anomaly(segment):
+                            next_segment = next_words_segment(
+                                            current_segments[si + 1 :])
+                            if next_segment is not None:
+                                hal_next_start = \
+                                    next_segment["words"][0]["start"]
+                            else:
+                                hal_next_start = time_offset \
+                                                + segment_duration
+                            silence_before = (
+                                segment["start"] - hal_last_end > threshold
+                                or segment["start"] < threshold
+                                or segment["start"] - time_offset < 2.0)
+                            silence_after = (
+                                hal_next_start - segment["end"] > threshold
+                                or is_segment_anomaly(next_segment)
+                                or window_end_time - segment["end"] < 2.0)
+                            
+                            if silence_before and silence_after:
+                                seek = round(max(time_offset + 1, 
+                                                 segment["start"])
+                                                 * FRAMES_PER_SECOND)
+                                if content_durations - segment["end"] \
+                                    < threshold:
+                                    seek = content_frames
+                                current_segments[si:] = []
+                                break
+                            hal_last_end = segment["end"]
+                    
+                    last_word_end = get_end(current_segments)
+                    if last_word_end is not None:
+                        last_speech_timestamp = last_word_end
+                
+                if verbose:
+                    for segment in current_segments:
+                        start, end, text = \
+                            segment["start"], segment["end"], segment["text"]
+                        line = f"[{format_timestamp(start)} --> 
+                                {format_timestamp(end)}] {text}"
+                        print(make_safe(line))
+                
+                # if a segment is instantaneous or does not contain text, 
+                # clear it
+                for i, segment in enumerate(current_segments):
+                    if segment["start"] \
+                        == segment["end"] or segment["text"].strip() == "":
+                        segment["text"] = ""
+                        segment["tokens"] = []
+                        segment["words"] = []
+                
+                all_segments.extend(
+                    [
+                        {"id": i, **segment}
+                        for i, segment in enumerate(current_segments,
+                                                    start=len(all_segments))
+                    ]
+                )
+                all_tokens.extend([token for segment in current_segments
+                                   for token in segment["tokens"]])
+                
+                if not condition_on_previous_text or result.temperature > 0.5:
+                    # do not feed the prompt tokens if a high temperature
+                    # was used
+                    prompt_reset_since = len(all_tokens)
+                
+                # update progress bar
+                pbar.update(min(content_frames, seek) - previous_seek)
+    
+        return dict(
+            text
+        )
