@@ -372,4 +372,110 @@ def transcribe(
                 return next((s for s in segments
                              if s["words"]), None)
             
+            timestamp_tokens: torch.Tensor = \
+                                tokens.ge(tokensizer.timestamp_begin)
+            single_timestamp_ending = \
+                timestamp_tokens[-2:].tolist() == [False, True]
             
+            consecutive = torch.where(timestamp_tokens[:-1]
+                                      & timestamp_tokens[1:])[0]
+            consecutive.add_(1)
+            if len(consecutive) > 0:
+                # if the output contains two consecutive timestamp tokens
+                slices = consecutive.tolist()
+                if single_timestamp_ending:
+                    slices.append(len(tokens))
+                
+                last_slice = 0
+                for current_slice in slices:
+                    sliced_tokens = tokens[last_slice:current_slice]
+                    start_timestamp_pos = (sliced_tokens[0].item()
+                                           - tokensizer.timestamp_begin)
+                    end_timestamp_pos = (sliced_tokens[-1].item()
+                                         - tokensizer.timestamp_begin)
+                    current_segments.append(
+                        new_segment(
+                            start=time_offset \
+                                + start_timestamp_pos \
+                                * time_precision,
+                            end=time_offset \
+                                + end_timestamp_pos \
+                                * time_precision,
+                            tokens=sliced_tokens,
+                            result=result))
+                    
+                    last_slice = current_slice
+                
+                if single_timestamp_ending:
+                    # single timestamp at the end means no speech after 
+                    # the last timestamp.
+                    seek += segment_size
+                else:
+                    # otherwise, ignore the unfinished segment and seek to
+                    # the last timestamp
+                    last_timestamp_pos = (tokens[last_slice - 1].item()
+                                          - tokensizer.timestamp_begin)
+                    seek += last_timestamp_pos * input_stride
+            else:
+                duration = segment_duration
+                timestamps = tokens[timestamp_tokens.nonzero().flatten()]
+                if (len(timestamps) > 0
+                    and timestamps[-1].item() != tokensizer.timestamp_begin):
+                    # no consecutive timestamps but it has a timestamp;
+                    # use the last one.
+                    last_timestamp_pos = (timestamps[-1].item()
+                                          - tokensizer.timestamp_begin)
+                    duration = last_timestamp_pos * time_precision
+                
+                current_segments.append(
+                    new_segment(
+                        start=time_offset,
+                        end=time_offset + duration,
+                        tokens=tokens))
+                
+                seek += segment_size
+            
+            if word_timestamps:
+                add_word_timestapms(
+                    segments=current_segments,
+                    model=model,
+                    tokenizer=tokensizer,
+                    mel=mel_segment,
+                    num_frames=segment_size,
+                    prepend_punctuations=prepend_punctuations,
+                    append_punctuations=append_punctuations,
+                    last_speech_timestamp=last_speech_timestamp)
+                
+                if not single_timestamp_ending:
+                    last_word_end = get_end(current_segments)
+                    if last_word_end is not None \
+                        and last_word_end > time_offset:
+                        seek = round(last_word_end * FRAMES_PER_SECOND)
+                
+                # skip silence before possible hallucinations
+                if hallucination_silence_threshold is not None:
+                    threshold = hallucination_silence_threshold
+                    if not single_timestamp_ending:
+                        last_word_end = get_end(current_segments)
+                        if last_word_end is not None \
+                            and last_word_end > time_offset:
+                            remaining_duration = \
+                                window_end_time - last_word_end
+                            if remaining_duration > threshold:
+                                seek = round(last_word_end 
+                                             * FRAMES_PER_SECOND)
+                            else:
+                                seek = previous_seek + segment_size
+                    
+                    # if first segment might be a hallucination, skip
+                    # leading silence
+                    first_segment = next_words_segment(current_segments)
+                    if first_segment is not None \
+                        and is_segment_anomaly(first_segment):
+                        gap = first_segment["start"] -time_offset
+                        if gap > threshold:
+                            seek = previous_seek + round(gap 
+                                                         * FRAMES_PER_SECOND)
+                            continue
+                    
+                    # 
