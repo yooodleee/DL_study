@@ -83,3 +83,37 @@ def get_end(segments: List[dict]) -> Optional[float]:
         segments[-1]["end"] if segments else None)
 
 
+class ResultWriter:
+    extension: str
+
+    def __init__(self, output_dir: str):
+        self.output_dir = output_dir
+    
+    def __call__(
+            self,
+            result: dict,
+            audio_path: str,
+            options: Optional[dict] = None,
+            **kwargs):
+        
+        audio_basename = os.path.basename(audio_path)
+        audio_basename = os.path.splitext(audio_basename)[0]
+        output_path = os.path.join(self.output_dir,
+                                   audio_basename + "." + self.extension)
+        
+        with open(output_path, "w", encoding="utf-8") as f:
+            self.write_result(result,
+                              file=f,
+                              options=options,
+                              **kwargs)
+    
+    def write_result(
+            self,
+            result: dict,
+            file: TextIO,
+            options: Optional[dict] = None,
+            **kwargs):
+        
+        raise NotImplementedError
+    
+
