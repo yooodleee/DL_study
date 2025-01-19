@@ -71,3 +71,9 @@ def format_timestamp(
             {decimal_marker}{milliseconds:03d}")
 
 
+def get_start(segments: List[dict]) -> Optional[float]:
+    return next(
+        (w["start"] for s in segments for w in s["words"]),
+        segments[0]["start"] if segments else None)
+
+
