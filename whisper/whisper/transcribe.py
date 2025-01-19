@@ -274,5 +274,102 @@ def transcribe(
         text_tokens = [token for token in tokens
                        if token < tokensizer.eot]
         return {
-            
+            "seek": seek,
+            "start": start,
+            "end": end,
+            "text": tokensizer.decode(text_tokens),
+            "tokens": tokens,
+            "temperature": result.temperature,
+            "avg_logprob": result.avg_logprob,
+            "compression_ratio": result.compression_ratio,
+            "no_speech_prob": result.no_speech_prob,
         }
+    
+    # show the progress bar when verbose is False
+    # (if True, transcribe text will be printed)
+    with tqdm.tqdm(total=content_frames,
+                   unit="frames",
+                   disable=verbose is not False) as pbar:
+        last_speech_timestamp = 0.0
+        # NOTE: This loop is obscurely flattened to make the diff readable.
+        # A later commit should turn this into a simpler nested loop.
+        # for seek_clip_start, seek_clip_end in seek_clips:
+        #       while seek < seek_clip_end
+        while clip_idx < len(seek_clips):
+            seek_clip_start, seek_clip_end = seek_clips[clip_idx]
+            if seek < seek_clip_start:
+                seek = seek_clip_start
+            if seek >= seek_clip_end:
+                clip_idx += 1
+                if clip_idx < len(seek_clips):
+                    seek = seek_clips[clip_idx][0]
+                continue
+            time_offset = float(seek * HOP_LENGTH / SAMPLE_RATE)
+            window_end_time = float((seek + N_FRAMES)
+                                    * HOP_LENGTH / SAMPLE_RATE)
+            segment_size = min(N_FRAMES,
+                               content_frames - seek,
+                               seek_clip_end - seek)
+            mel_segment = mel[:, seek : seek + segment_size]
+            segment_duration = segment_size * HOP_LENGTH / SAMPLE_RATE
+            mel_segment = pad_or_trim(mel_segment,
+                                      N_FRAMES).to(model.device).to(dtype)
+            
+            if carry_initial_prompt:
+                nignored = max(len(initial_prompt_tokens),
+                               prompt_reset_since)
+                remaining_prompt = \
+                    all_tokens[nignored:][-remaining_prompt_length:]
+                decode_options["prompt"] = initial_prompt_tokens \
+                                            + remaining_prompt
+            else:
+                decode_options["prompt"] = all_tokens[prompt_reset_since:]
+            
+            result: DecodingResult = decode_with_fallback(mel_segment)
+            tokens = torch.tensor(result.tokens)
+
+            if no_speech_threshold is not None:
+                # no voice activity check
+                should_skip = result.no_speech_prob > no_speech_threshold
+                if (logprob_threshold is not None
+                    and result.avg_logprobs
+                    > logprob_threshold):
+                    # don't skip if the logprob is high enough,
+                    # despite the no_speech_prob
+                    should_skip = False
+                
+                if should_skip:
+                    # fast-forward to the next segment boundary
+                    seek += segment_size
+                    continue
+            
+            previous_seek = seek
+            current_segments = []
+
+            # anomalous words are very long/short/improbable
+            def word_anomaly_score(word: dict) -> float:
+                probability = word.get("probability", 0.0)
+                duration = word["end"] - word["start"]
+                score = 0.0
+                if probability < 0.15:
+                    score += 1.0
+                if duration < 0.133:
+                    score += (0.133 - duration) * 15
+                if duration > 2.0:
+                    score += duration - 2.0
+                return score
+            
+            def is_segment_anomaly(segment: Optional[dict]) -> bool:
+                if segment is None or not segment["words"]:
+                    return False
+                words = [w for w in segment["words"]
+                         if w["word"] not in punctuation]
+                words = words[:8]
+                score = sum(word_anomaly_score(w) for w in words)
+                return score >= 3 or score + 0.01 >= len(words)
+            
+            def next_words_segment(segments: List[dict]) -> Optional[dict]:
+                return next((s for s in segments
+                             if s["words"]), None)
+            
+            
