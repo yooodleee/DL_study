@@ -77,3 +77,9 @@ def get_start(segments: List[dict]) -> Optional[float]:
         segments[0]["start"] if segments else None)
 
 
+def get_end(segments: List[dict]) -> Optional[float]:
+    return next(
+        (w["end"] for s in reversed(segments) for w in reversed(s["words"])),
+        segments[-1]["end"] if segments else None)
+
+
