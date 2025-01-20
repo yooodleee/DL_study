@@ -457,3 +457,20 @@ class EnglishNumberNormalizer:
         return s
 
 
+class EnglishSpellingNormalizer:
+    """
+    Applies British-American spelling mappings as listed in [1].
+
+    [1] https://www.tysto.com/uk-us-spelling-list.html
+    """
+
+    def __init__(self):
+        mapping_path = os.path.join(os.path.dirname(__file__),
+                                    "english.json")
+        self.mapping = json.load(open(mapping_path))
+    
+    def __call__(self, s: str):
+        return " ".join(self.mapping.get(word, word)
+                        for word in s.split())
+
+
