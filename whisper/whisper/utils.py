@@ -336,3 +336,31 @@ class WriteJSON(ResultWriter):
         json.dump(result, file)
 
 
+def get_writer(
+        output_format: str,
+        output_dir: str
+) -> Callable[[dict, TextIO, dict], None]:
+
+    writers = {
+        "txt": WriteTXT,
+        "vtt": WriteVTT,
+        "srt": WriteSRT,
+        "tsv": WriteTSV,
+        "json": WriteJSON,
+    }
+
+    if output_format == "all":
+        all_writers = [writer(output_dir) for writer in writers.values()]
+
+        def write_all(
+                result: dict,
+                file: TextIO,
+                options: Optional[dict] = None,
+                **kwargs):
+            
+            for writer in all_writers:
+                writer(result, file, options, **kwargs)
+        
+        return write_all
+    
+    return writers[output_format](output_dir)
