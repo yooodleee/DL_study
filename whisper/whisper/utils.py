@@ -273,3 +273,23 @@ class WriteVTT(SubtitlesWriter):
             print(f"{start} --> {end}\n{text}\n",
                  file=file, flush=True)
 
+
+class WriteSRT(SubtitlesWriter):
+    extension: str = "str"
+    always_include_hours: bool = True
+    decimal_marker: str = ","
+
+    def write_result(
+            self,
+            result: dict,
+            file: TextIO,
+            options: Optional[dict] = None,
+            **kwargs):
+        
+        for i, (start, end, text) in enumerate(
+            self.interface_result(result, options, **kwargs), start=1
+        ):
+            print(f"{i}\n{start} --> {end}\n{text}\n",
+                 file=file, flush=True)
+
+
