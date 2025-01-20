@@ -323,3 +323,16 @@ class WriteTSV(ResultWriter):
                  file=file, flush=True)
 
 
+class WriteJSON(ResultWriter):
+    extension: str = "json"
+
+    def write_result(
+            self,
+            result: dict,
+            file: TextIO,
+            options: Optional[dict] = None,
+            **kwargs):
+        
+        json.dump(result, file)
+
+
