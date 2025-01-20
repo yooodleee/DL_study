@@ -422,4 +422,38 @@ class EnglishNumberNormalizer:
 
         return s
     
+    def postprocess(self, s: str):
+        def combine_cents(m: Match):
+            try:
+                currency = m.group(1)
+                integer = m.group(2)
+                cents = int(m.group(3))
+                return f"{currency}{integer}.{cents:02d}"
+            except ValueError:
+                return m.string
+        
+        def extract_cents(m: Match):
+            try:
+                return f"¢{int(m.group(1))}"
+            except ValueError:
+                return m.string
+        
+        # apply currency postprocessing: "$2 and ¢7" -> "$2.07"
+        s = re.sub(r"([€£$])([0-9]+) (?:and )?¢([0-9]{1,2})\b", 
+                   combine_cents, s)
+        s = re.sub(r"[€£$]0.([0-9]{1,2})\b", extract_cents, s)
+
+        # write "one(s)" instead of "1(s)", just for the readability
+        s = re.sub(r"b1(s?)\b", r"one\1", s)
+
+        return s
     
+    def __call__(self, s: str):
+        s = self.preprocess(s)
+        s = " ".join(word for word in self.process_words(s.split())
+                     if word is not None)
+        s = self.postprocess(s)
+
+        return s
+
+
