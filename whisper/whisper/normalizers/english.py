@@ -394,4 +394,32 @@ class EnglishNumberNormalizer:
             yield output(value)
     
     def preprocess(self, s: str):
-        # replace 
+        # replace "<number> and a half" with "<number> point five"
+        results = []
+
+        segments = re.split(r"\band\s+a\s+half\b", s)
+        for i, segment in enumerate(segments):
+            if len(segment.strip()) == 0:
+                continue
+            if i == len(segments) - 1:
+                results.append(segment)
+            else:
+                results.append(segment)
+                last_word = segment.rsplit(maxsplit=2)[-1]
+                if last_word in self.decimals or last_word in self.multipliers:
+                    results.append("point five")
+                else:
+                    results.append("and a half")
+        
+        s = " ".join(results)
+
+        # put a space at number/letter boundary
+        s = re.sub(r"([a-z]))[0-9]", r"\1 \2", s)
+        s = re.sub(r"([0-9])([a-z])", r"\1 \2", s)
+
+        # but remove spaces which could be a suffix
+        s = re.sub(r"([0-9])\s+(st|nd|rd|th|s)\b", r"\1\2", s)
+
+        return s
+    
+    
