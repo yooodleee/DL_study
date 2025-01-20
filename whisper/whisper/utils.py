@@ -117,3 +117,17 @@ class ResultWriter:
         raise NotImplementedError
     
 
+class WriterTXT(ResultWriter):
+    extension: str = "txt"
+
+    def write_result(
+            self,
+            result: dict, 
+            file: TextIO,
+            options: Optional[dict] = None,
+            **kwargs):
+        
+        for segment in result["segments"]:
+            print(segment["text"].strip(), file=file, flush=True)
+
+
