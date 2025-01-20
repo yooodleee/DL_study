@@ -254,3 +254,22 @@ class SubtitlesWriter(ResultWriter):
             decimal_marker=self.decimal_marker)
 
 
+class WriteVTT(SubtitlesWriter):
+    extension: str = "vtt"
+    always_include_hours: bool = False
+    decimal_marker: str = "."
+
+    def write_result(
+            self,
+            result: dict,
+            file: TextIO,
+            options: Optional[dict] = None,
+            **kwargs):
+        
+        print("WEBVTT\n", file=file)
+        for start, end, text in self.interface_result(result,
+                                                     options,
+                                                     **kwargs):
+            print(f"{start} --> {end}\n{text}\n",
+                 file=file, flush=True)
+
