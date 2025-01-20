@@ -117,7 +117,7 @@ class ResultWriter:
         raise NotImplementedError
     
 
-class WriterTXT(ResultWriter):
+class WriteTXT(ResultWriter):
     extension: str = "txt"
 
     def write_result(
@@ -131,3 +131,32 @@ class WriterTXT(ResultWriter):
             print(segment["text"].strip(), file=file, flush=True)
 
 
+class SubtitlesWriter(ResultWriter):
+    always_include_hours: bool
+    decimal_marker: str
+
+    def interface_result(
+            self,
+            result: dict,
+            options: Optional[dict] = None,
+            *,
+            max_line_width: Optional[int] = None,
+            max_line_count: Optional[int] = None,
+            highlight_words: bool = False,
+            max_words_per_line: Optional[int] = None):
+        
+        options = options or {}
+        max_line_width = max_line_width or options.get("max_line_width")
+        max_line_count = max_line_count or options.get("max_line_count")
+        highlight_words = highlight_words or options.get("highlight_words", 
+                                                        False)
+        max_words_per_line = max_words_per_line \
+                            or options.get("max_words_per_line")
+        max_line_width = max_line_count is None or max_line_width is None
+        max_line_width = max_line_width or 1000
+        max_words_per_line = max_words_per_line or 1000
+
+        def iterate_subtitles():
+            line_len = 0
+            line_count = 1
+            # the next subtitle 
