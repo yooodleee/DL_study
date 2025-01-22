@@ -1,6 +1,6 @@
 ## DL_study
 
-![image](https://github.com/user-attachments/assets/2a92c65f-a5f8-4174-bc0f-0198144b2e1b)
+![image](https://github.com/user-attachments/assets/71ea5c98-29c6-4c3f-81b1-41583debcee2)
 
 ### Introduction  
 This repository serves as a foundational platform for deep learning studies, aiming to explore various libraries, tools, and algorithms in depth.  
